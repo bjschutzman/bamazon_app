@@ -1,5 +1,6 @@
 var mysql = require("mysql");
 var inquirer = require("inquirer");
+var Table = require('cli-table');
 
 // create the connection information for the sql database
 var connection = mysql.createConnection({
@@ -20,15 +21,29 @@ var connection = mysql.createConnection({
 connection.connect(function(err){
     // if (err) throw err;
     console.log("detected")
-    // displayItems()
-    productSelect();
+   
 });
 
 
-
-
-
-
+// displays all Items in table
+function displayItems(){
+    var query = "SELECT * FROM products"
+    connection.query(query, function(err, results){
+        // if (err) throw err;
+        var displayTable = new Table ({
+			head: ["id", "product_name", "department", "price", "stock_quantity"],
+			colWidths: [10,25,25,10,14]
+		});
+		for(var i = 0; i < results.length; i++){
+			displayTable.push(
+				[results[i].id,results[i].product_name, results[i].department, results[i].price, results[i].stock_quantity]
+				);
+		}
+		console.log(displayTable.toString());
+        productSelect();
+	});
+}
+    
 
 // creates prompt for which product
 function productSelect(){
@@ -60,45 +75,26 @@ function productSelect(){
         .then(function(input){
             var item = input.id_select
             var quantity = input.quantity;
-            connection.query(
-                'SELECT FROM products WHERE?', {id_select: id}, function(err,data){
-                    if (err) throw err
-                    if(item.quantity > product.quantity){
-                        console.log("We are out of stock")
-                    }
+            poReturn(item, quantity);
+        });
+    };
+
+    function poReturn(id, quantityNeed){
+            connection.query('SELECT * from products WHERE id = ' + id, function(err, results){
+                // if (err) throw err
+                if(quantityNeed <= results[0].stock_quantity){
+                    var totalCost = results[0].price * quantityNeed
+                    console.log('There is enough inventory to complete your order');
+                    console.log('Your total cost for ' + quantityNeed + ' ' + results[0].product_name + ' is ' + totalCost);
+                    
+
+                    connection.query("UPDATE product set stock_quantity = stock_quantity -" + quantityNeed + "WHERE id = " + id);
+           
                 }
-            )
-        })
-}
-
-
-
-
-
-
-
-
-
-
-
-
-// displays all Items
-function displayItems(){
-    connection.query("SELECT * FROM products", function(err, results){
-        if (err) throw err;
-        console.log("_____________________________Inventory_____________________________")
-        console.log('\n');
-        var availableInv;
-        for (var i = 0; i < results.length; i++){
-            availableInv = '';
-            availableInv += "ID: " + results[i].id + '  //  ';
-            availableInv += "Product Name: " + results[i].product_name + "  //  ";
-            availableInv += "Department: " + results[i].department + "  //  ";
-            availableInv += "Price: " + results[i].price + " \n";
-
-            console.log(availableInv);
-        }
-        connection.end();
-
-    });
-}
+                else{
+                    console.log('Insufficient quantity. There is not enough '  + results[0].product_name + ' to complete your order.');
+                } ;
+                displayItems();  
+            });
+        };             
+displayItems();
