@@ -1,6 +1,6 @@
 var mysql = require("mysql");
 var inquirer = require("inquirer");
-var Table = require('cli-table');
+var Table = require("cli-table");
 
 // create the connection information for the sql database
 var connection = mysql.createConnection({
@@ -21,80 +21,114 @@ var connection = mysql.createConnection({
 connection.connect(function(err){
     // if (err) throw err;
     console.log("detected")
-   
+    searchItems();
+    
 });
 
-
-// displays all Items in table
-function displayItems(){
-    var query = "SELECT * FROM products"
-    connection.query(query, function(err, results){
-        // if (err) throw err;
-        var displayTable = new Table ({
-			head: ["id", "product_name", "department", "price", "stock_quantity"],
-			colWidths: [10,25,25,10,14]
-		});
-		for(var i = 0; i < results.length; i++){
-			displayTable.push(
-				[results[i].id,results[i].product_name, results[i].department, results[i].price, results[i].stock_quantity]
-				);
-		}
-		console.log(displayTable.toString());
-        productSelect();
-	});
+// Logs all of the data from the database
+function searchItems() {
+  connection.query(
+    "SELECT id, product_name, price, stock_quantity FROM products WHERE stock_quantity>0",
+    function(err, res) {
+      if (err) throw err;
+      console.log("Id \t Name \t Price \t Quantity\n");
+      for (var i = 0; i < res.length; i++) {
+        console.log(
+          res[i].id +
+            "\t" +
+            res[i].product_name +
+            "\t" +
+            res[i].price +
+            "\t" +
+            res[i].stock_quantity +
+            "\n"
+        );
+      }
+    //   response from prompt
+      promptQ(res.length);
+    }
+  );
 }
-    
 
-// creates prompt for which product
-function productSelect(){
-    inquirer
+// prompt for finding id and amount the customer would like to purchse
+function promptQ(length) {
+  inquirer
+    .prompt([
+      {
+        type: "input",
+        name: "item_id",
+        message:
+          "Enter the Item Id you would like to buy??? 'Press C to Exit'"
+      }
+    ])
+    .then(function(answer) {
+      var purchaseItemId = answer.item_id;
+      if (purchaseItemId.toUpperCase() === "C") {
+        process.exit();
+      }
+      inquirer
         .prompt([
-            {
-            name: 'id_select',
-            type: 'input',
-            message: 'Which product would you like to choose? Slect ID',
-            validate: function(value) {
-                if (isNaN(value) === false) {
-                  return true;
-                }
-                return false;
-              }
-            },
-            {
-            name: 'quantity',
-            type: 'input',
-            message: 'How many would you like to purchase?',
-            validate: function(value) {
-                if (isNaN(value) === false) {
-                  return true;
-                }
-                return false;
-              }
-            }
+          {
+            type: "input",
+            name: "quantity",
+            message: "how many units of the product would you like to buy???"
+          }
         ])
-        .then(function(input){
-            var item = input.id_select
-            var quantity = input.quantity;
-            poReturn(item, quantity);
-        });
-    };
+        .then(function(answer) {
 
-    function poReturn(id, quantityNeed){
-            connection.query('SELECT * from products WHERE id = ' + id, function(err, results){
-                // if (err) throw err
-                if(quantityNeed <= results[0].stock_quantity){
-                    var totalCost = results[0].price * quantityNeed
-                    console.log('There is enough inventory to complete your order');
-                    console.log('Your total cost for ' + quantityNeed + ' ' + results[0].product_name + ' is ' + totalCost);
-                    
+            // checks to make sure that the inputs are real inputs.
+            if (
+            purchaseItemId > length + 1 ||
+            isNaN(purchaseItemId) ||
+            isNaN(answer.quantity)){
+            console.log("invalid Input");
 
-                    connection.query("UPDATE product set stock_quantity = stock_quantity -" + quantityNeed + "WHERE id = " + id);
-           
+
+            if (purchaseItemId > length + 1 || isNaN(purchaseItemId)) {
+              console.log("The item id is not valid");
+            }
+            if (isNaN(answer.quantity)) {
+              console.log("Invalid quantity");
+            }
+            // connection.end();
+            searchItems();
+            
+            // moves to confirming the purchase and giving the cost  
+          } else {
+            connection.query(
+              "SELECT stock_quantity, price from products where id = ?",
+              [purchaseItemId],
+              function(err, res) {
+                if (err) throw err;
+                if (answer.quantity > res[0].stock_quantity) {
+                  console.log("Insufficient quantity!");
+                } else {
+                  var updateQuantity =
+                    res[0].stock_quantity - parseFloat(answer.quantity);
+                  connection.query(
+                    "update products set ? where ?",
+                    [
+                      {
+                        stock_quantity: updateQuantity
+                      },
+                      {
+                        id: purchaseItemId
+                      }
+                    ],
+                    function(err, res) {
+                      if (err) throw err;
+                    }
+                  );
+                  var totalCost = res[0].price * answer.quantity;
+                  console.log(
+                    "The total price of the purchase : " + totalCost.toFixed(2)
+                  );
                 }
-                else{
-                    console.log('Insufficient quantity. There is not enough '  + results[0].product_name + ' to complete your order.');
-                } ;
-                displayItems();  
-            });
-        };             
-displayItems();
+                // connection.end();
+                searchItems();
+              }
+            );
+          }
+        });
+    });
+}
